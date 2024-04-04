@@ -30,6 +30,7 @@ import de.tu_bs.cs.isf.cbc.tool.features.RenameStatementFeature;
 import de.tu_bs.cs.isf.cbc.tool.features.RenameVariableFeature;
 import de.tu_bs.cs.isf.cbc.tool.features.RenameVariantFeature;
 import de.tu_bs.cs.isf.cbc.tool.features.ShowKeyFileFeature;
+import de.tu_bs.cs.isf.cbc.tool.features.SynthesizeStatement;
 import de.tu_bs.cs.isf.cbc.tool.features.TestAllStatements;
 import de.tu_bs.cs.isf.cbc.tool.features.TestAndAssertionGenerator;
 import de.tu_bs.cs.isf.cbc.tool.features.TestStatement;
@@ -134,6 +135,7 @@ public class CbCFeatureProvider extends DefaultFeatureProviderWithPatterns {
 				new TestAllStatements(this),
 				new TestStatement(this),
 	    		new TestAndAssertionGenerator(this),
+	    		new SynthesizeStatement(this),
 				new VerifyStatement(this),
 				new VerifyOriginalCallStatement(this),
 				new VerifyMethodCallStatement(this),

@@ -1,6 +1,10 @@
 package de.tu_bs.cs.isf.cbc.util;
 
+import java.io.BufferedWriter;
 import java.io.File;
+import java.io.FileWriter;
+import java.io.IOException;
+import java.io.Writer;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -42,6 +46,7 @@ import de.tu_bs.cs.isf.cbc.cbcmodel.GlobalConditions;
 import de.tu_bs.cs.isf.cbc.cbcmodel.JavaVariable;
 import de.tu_bs.cs.isf.cbc.cbcmodel.JavaVariables;
 import de.tu_bs.cs.isf.cbc.cbcmodel.Renaming;
+import de.tu_bs.cs.isf.cbc.cbcmodel.SmallRepetitionStatement;
 import de.tu_bs.cs.isf.cbc.cbcmodel.Variant;
 import de.tu_bs.cs.isf.cbc.statistics.FileNameManager;
 import de.tu_bs.cs.isf.cbc.util.consts.MetaNames;
@@ -153,18 +158,40 @@ public class ProveWithKey {
 		Method method = clazz.getMethods().stream().filter(m -> m.getName().equals(callingMethod)).findFirst().get();
 		return EcoreUtil.copyAll(method.getParameters());
 	}
-
+	
 	public File createProveStatementWithKey(List<CbCFormula> refinementsOriginal, List<CbCFormula> refinements, List<JavaVariables> refinementsVars, boolean override, String callingMethod, String varM, boolean returnStatement, String callingClass) {
+		return createProveStatementWithKey(refinementsOriginal, refinements, refinementsVars, override, callingMethod, varM, returnStatement, callingClass, null, false);
+	}
+
+	public File createProveStatementWithKey(List<CbCFormula> refinementsOriginal, List<CbCFormula> refinements, List<JavaVariables> refinementsVars, boolean override, String callingMethod, String varM, boolean returnStatement, String callingClass, String additionalHeader, boolean isLoopVariantUpdate) {
 		String callingFeature = FeatureUtil.getInstance().getCallingFeature(uri);
 		KeYFileContent content = new KeYFileContent(fileHandler.getProjectLocation(uri));
 		JavaVariables varsFromJavaClass = readFieldsFromClass(callingClass);
+		
+		String variantVariable = "variantVar";
+		if(isLoopVariantUpdate) {
+			EList<JavaVariable> usedVars = content.getProgramVariables().getVariables();
+			ArrayList<String> usedVarNames = new ArrayList<String>();			
+			for(int i = 0; i < usedVars.size(); i++) {
+				usedVarNames.add(usedVars.get(i).getName().split(" ")[1]);
+			}
+			variantVariable = "variantVar";
+			for(int j = 0; ; j++) {
+				String cand = variantVariable + j;
+				if(!(usedVarNames.contains(cand))) {
+					variantVariable = cand;
+					break;
+				}
+			}
+		}
+		
 		addExistingVarsTo(varsFromJavaClass);
 		content.setSrcFolder(sourceFolder);
 		content.readVariables(varsFromJavaClass);
 		JavaVariable returnVariable = content.readVariables(vars);
 		
 		content.readGlobalConditions(conds);
-		readPrePostModVars(varM.length() == 0 ? refinements : refinementsOriginal, refinementsVars, returnVariable, content, callingClass);
+		readPrePostModVars(varM.length() == 0 ? refinements : refinementsOriginal, refinementsVars, returnVariable, content, callingClass, isLoopVariantUpdate, variantVariable);
 		
 		if (returnStatement) {
 			content.setStatement(";");
@@ -176,14 +203,14 @@ public class ProveWithKey {
 		replaceOriginalInStatement(refinementsOriginal, refinements, refinementsVars, callingMethod, content, varM, callingClass, callingFeature);
 		content.addSelf(formula);
 		
-		problem = content.getKeYStatementContent();	
+		problem = content.getKeYStatementContent(additionalHeader, variantVariable);	
 		problem = problem.replaceAll("static", "");
 		problem = problem.replaceAll("return", ""); // TODO replace with correct handling of return
 		
 		String location = fileHandler.getLocationString(uri) + configName;
 		File keyFile = fileHandler.writeFile(problem, location, override, statement, subProofName);
 		return keyFile;
-	}
+	}	
 
 	private JavaVariables readFieldsFromClass(String className) {
 		JavaVariables vars = CbcmodelFactory.eINSTANCE.createJavaVariables();
@@ -262,6 +289,10 @@ public class ProveWithKey {
 	}
 	
 	public void readPrePostModVars(List<CbCFormula> refinements, List<JavaVariables> refinementsVars, JavaVariable returnVariable, KeYFileContent content, String callingClass) {
+		readPrePostModVars(refinements, refinementsVars, returnVariable, content, callingClass, false, null);
+	}
+	
+	public void readPrePostModVars(List<CbCFormula> refinements, List<JavaVariables> refinementsVars, JavaVariable returnVariable, KeYFileContent content, String callingClass, boolean isLoopVariantUpdate, String variantVariable) {
 		CbCFormula formula = getCbCFormula(statement);
 		String preFormula = Parser.getConditionFromCondition(formula.getStatement().getPreCondition().getName());
 		String postFormula = Parser.getConditionFromCondition(formula.getStatement().getPostCondition().getName());
@@ -293,6 +324,19 @@ public class ProveWithKey {
 		
 		if (pre.equals(preFormula)) pre += preInvariant;
 		if (pre.equals(preFormula)) post += postInvariant;
+
+		
+		if(isLoopVariantUpdate) {			
+			EObject container = statement.eContainer();
+			while (!(container instanceof SmallRepetitionStatement)) {
+				container = container.eContainer();
+			}
+			SmallRepetitionStatement rep = (SmallRepetitionStatement)container;
+			Variant repVariant = rep.getVariant();		
+			
+			pre += (" & " + variantVariable + " = " + repVariant.getName());
+			post += (" & " + variantVariable + " < " + repVariant.getName());
+		}
 		
 		content.setPreFromCondition(resolveResultKeyword(pre, returnVariable));
 		content.setPostFromCondition(resolveResultKeyword(post, returnVariable));
@@ -574,6 +618,7 @@ public class ProveWithKey {
 		Proof proof = null;
 		proof = KeYInteraction.startKeyProof(location, null, inlining, formula, statement, problem, uri);
 		if (proof != null) {
+			addIdCommentToKeyFile(proof.getProofFile(), statement.getId());
 			boolean closed = proof.openGoals().isEmpty();
 			if (!closed) {
 				Console.println("  Proof could not be closed.");
@@ -590,6 +635,18 @@ public class ProveWithKey {
 			}
 		}
 		return false;
+	}
+	
+	private static void addIdCommentToKeyFile(File keyfile, String id) {
+		Writer writer;
+		try {
+			writer = new BufferedWriter(new FileWriter(keyfile, true));
+			writer.append("//statementid:{" + id + "}");
+			writer.close();
+		} catch (IOException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
 	}
 
 	public boolean proveCImpliesCWithKey(Condition preCondition, Condition postCondition) {

@@ -103,6 +103,10 @@ public class KeYFileContent {
 		return statement;
 	}
 	
+	public JavaVariables getProgramVariables() {
+		return this.programVariables;
+	}
+	
 	public void addVariable(String var) {
 		JavaVariable variable = CbcmodelFactory.eINSTANCE.createJavaVariable();
 		variable.setName(var);
@@ -264,14 +268,18 @@ public class KeYFileContent {
 	}
 	
 	public String getKeYStatementContent() {
-		return 	getKeYContent(true);
+		return 	getKeYContent(true, null, null);
+	}
+	
+	public String getKeYStatementContent(String additionalHeader, String variantVariable) {
+		return 	getKeYContent(true, additionalHeader, variantVariable);
 	}
 	
 	public String getKeYCImpliesCContent() {
-		return  getKeYContent(false);
+		return  getKeYContent(false, null, null);
 	}
 	
-	public String getKeYContent(boolean withStatement) {
+	public String getKeYContent(boolean withStatement, String additionalHeader, String variantVariable) {
 		replaceThisForSelfInStatement();
 		addSelfForFields();
 		
@@ -279,7 +287,7 @@ public class KeYFileContent {
 		Map<String, OldReplacement> oldReplacements = addOldVariables(self, oldKeywords);
 		
 		StringBuilder builder = new StringBuilder();
-		builder.append(getKeyHeader(oldReplacements));
+		builder.append(getKeyHeader(oldReplacements, additionalHeader, variantVariable));
 		builder.append(getKeyProblem(oldReplacements));
 		if (withStatement) 
 			builder.append(" \\<{" + renameStatement(statement) + "}\\>");
@@ -308,12 +316,14 @@ public class KeYFileContent {
 		}
 	}
 	
-	private String getKeyHeader(Map<String, OldReplacement> oldReplacements) {
-		return MessageFormat.format(
+	private String getKeyHeader(Map<String, OldReplacement> oldReplacements, String additionalHeader, String variantVariable) {
+		return (additionalHeader == null ? "" : additionalHeader) + 
+				MessageFormat.format(				  
 				"\\javaSource \"{0}\";\n"
 				+ "\\include \"{1}\";\n"
 				+ "\\programVariables '{'\n"
 				+ "{2}"
+				+ "int " + variantVariable + ";\n"
 				+ "Heap heapAtPre;\n"
 				+ "'}'", 
 				location + srcFolder,
