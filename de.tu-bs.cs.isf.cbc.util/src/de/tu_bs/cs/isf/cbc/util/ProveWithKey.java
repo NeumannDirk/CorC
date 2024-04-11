@@ -335,7 +335,7 @@ public class ProveWithKey {
 			Variant repVariant = rep.getVariant();		
 			
 			pre += (" & " + variantVariable + " = " + repVariant.getName());
-			post += (" & " + variantVariable + " < " + repVariant.getName());
+			post += (" & " + variantVariable + " > " + repVariant.getName());
 		}
 		
 		content.setPreFromCondition(resolveResultKeyword(pre, returnVariable));
